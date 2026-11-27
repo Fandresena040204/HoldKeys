@@ -48,6 +48,7 @@ Entrée : action principale (lancer, insérer, coller…) · Ctrl+Entrée : acti
 | Texte mis en forme (page web, Word…) | Markdown (titres, gras, liens, listes, tableaux) · fichier `.html` ou `.md` |
 | Image | texte de l'image (OCR de Windows, hors ligne) · fichier `.png` · Base64 (data URI) |
 | Fichiers | chemins · noms · contenu d'un fichier texte |
+| Historique | les derniers éléments copiés (épinglés d'abord), filtrés par la saisie ; Ctrl+Entrée : épingler, Maj+Suppr : effacer |
 | IA (optionnel) | actions personnalisables (corriger, traduire, résumer…) et instruction libre tapée dans la barre, via l'API Claude |
 
 Ctrl+Entrée : copier le résultat au lieu de le coller (ou, pour un fichier, l'enregistrer dans Téléchargements).

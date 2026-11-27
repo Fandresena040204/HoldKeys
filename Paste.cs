@@ -456,7 +456,7 @@ Tableau Markdown = Convertis en tableau Markdown.
         public override string Prefix { get { return "+"; } }
         public override bool Global { get { return false; } }
         public override string HelpTitle { get { return "+  Collage avancé"; } }
-        public override string HelpText { get { return "texte brut, Markdown, JSON, fichier, texte d'une image, IA… · raccourci Win+Alt+V"; } }
+        public override string HelpText { get { return "texte brut, Markdown, JSON, fichier, texte d'une image, IA, historique… · raccourci Win+Alt+V"; } }
 
         static string Preview(string s)
         {
@@ -573,7 +573,15 @@ Tableau Markdown = Convertis en tableau Markdown.
                 if (q.Length > 0) res.Add(AiResult("Avec l'IA : " + q, q, t, png, "Instruction libre envoyée à Claude avec le contenu copié", true));
             }
 
-            if (res.Count == 0)
+            // Historique du presse-papiers, sous les actions sur le contenu actuel (filtré par la saisie).
+            var history = ClipboardProvider.Items(q, q.Length > 0 ? 40 : 25, text);
+            foreach (var h in history)
+            {
+                h.Glyph = "🕘";
+                h.Subtitle = "Historique · " + h.Subtitle;
+            }
+
+            if (res.Count == 0 && history.Count == 0)
                 res.Add(new Result { Title = "Le presse-papiers est vide", Subtitle = "Copiez du texte, une image ou des fichiers, puis rouvrez le collage avancé", Glyph = "📋" });
 
             // Filtre par la saisie (l'action IA libre reste toujours proposée).
@@ -585,10 +593,16 @@ Tableau Markdown = Convertis en tableau Markdown.
                     int s = r.Title.StartsWith("Avec l'IA") || r.Title.StartsWith("Actions IA") ? 1 : Matcher.Score(q, r.Title);
                     if (s > 0) { r.Score = s; filtered.Add(r); }
                 }
+                for (int i = 0; i < history.Count; i++) { history[i].Score = 30 - Math.Min(i, 25); filtered.Add(history[i]); }
                 return filtered;
             }
-            for (int i = 0; i < res.Count; i++) res[i].Score = 1000 - i;
-            return res;
+            // Ordre : actions principales, puis l'historique, puis fichiers, transformations et IA.
+            var primaryGlyphs = new HashSet<string> { "T", "M↓", "{ }", "🔍", "📁" };
+            var ordered = res.Where(r => primaryGlyphs.Contains(r.Glyph)).ToList();
+            ordered.AddRange(history);
+            ordered.AddRange(res.Where(r => !primaryGlyphs.Contains(r.Glyph)));
+            for (int i = 0; i < ordered.Count; i++) ordered[i].Score = 1000 - i;
+            return ordered;
         }
 
         Result AiResult(string title, string instruction, string text, byte[] png, string sub, bool free = false)

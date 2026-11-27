@@ -564,11 +564,23 @@ namespace HoldKeys
                 res.Add(new Result { Title = "Historique du presse-papiers désactivé", Subtitle = "Activez-le dans les Paramètres HoldKeys", Glyph = "📋" });
                 return res;
             }
+            res = Items(q, int.MaxValue, null);
+            if (res.Count == 0) res.Add(new Result { Title = q.Length > 0 ? "Aucun élément ne correspond" : "Rien copié pour l'instant", Subtitle = "Copiez du texte (Ctrl+C) pour le retrouver ici", Glyph = "📋" });
+            return res;
+        }
+
+        // Éléments de l'historique (épinglés d'abord), filtrés par la saisie ; partagé avec le collage avancé.
+        internal static List<Result> Items(string q, int max, string exclude)
+        {
+            var res = new List<Result>();
+            if (!ClipboardHistory.Enabled) return res;
             string nq = SymbolDb.Normalize(q);
             int i = 0;
             foreach (var it in ClipboardHistory.Items.OrderByDescending(x => x.Pinned))
             {
                 ClipItem item = it;
+                if (res.Count >= max) break;
+                if (exclude != null && it.Text == exclude && !it.Pinned) continue;
                 if (nq.Length > 0 && !SymbolDb.Normalize(it.Text).Contains(nq)) { i++; continue; }
                 string first = it.Text.Trim().Replace("\r", "").Split('\n')[0];
                 if (first.Length > 150) first = first.Substring(0, 150) + "…";
@@ -587,7 +599,6 @@ namespace HoldKeys
                     DeleteRun = () => { ClipboardHistory.Items.Remove(item); ClipboardHistory.Save(); }
                 });
             }
-            if (res.Count == 0) res.Add(new Result { Title = nq.Length > 0 ? "Aucun élément ne correspond" : "Rien copié pour l'instant", Subtitle = "Copiez du texte (Ctrl+C) pour le retrouver ici", Glyph = "📋" });
             return res;
         }
     }
