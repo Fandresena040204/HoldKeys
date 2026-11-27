@@ -323,7 +323,7 @@ namespace HoldKeys
             if (box.Text != initial) box.Text = initial; else RefreshResults();
             Show();
             Activate();
-            Native.SetForegroundWindow(Handle);
+            if (!Native.SetForegroundWindow(Handle)) TrayContext.Log("lanceur : impossible de passer au premier plan");
             box.Focus();
             box.SelectionStart = box.Text.Length;
         }

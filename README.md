@@ -12,7 +12,7 @@ Petit utilitaire Windows pour taper les caractères spéciaux en **maintenant un
   - Maj / Verr. Maj donnent les majuscules.
 - **Derniers caractères utilisés en premier** (historique conservé, effaçable).
 - **Lanceur universel** avec **Win+Alt+Espace** (voir ci-dessous).
-- **Collage avancé** avec **Win+Shift+V** (voir ci-dessous).
+- **Collage avancé** avec **Win+Alt+V** (voir ci-dessous).
 - **Texte rapide** : tapez `;mail`, `;sig`, `;date`… n'importe où, l'abréviation est remplacée par votre texte.
 - **Historique du presse-papiers** chiffré avec votre compte Windows, avec épinglage (les mots de passe des gestionnaires sont ignorés).
 - **Fenêtre Paramètres** en onglets (double-clic sur l'icône) : délais, raccourci, caractères par touche, texte rapide, presse-papiers, démarrage avec Windows.
@@ -40,7 +40,7 @@ Entrée : action principale (lancer, insérer, coller…) · Ctrl+Entrée : acti
 
 ## Collage avancé
 
-**Win+Shift+V** (ou `+` dans le lanceur) propose de coller ce que vous avez copié sous une autre forme. Le presse-papiers d'origine est restauré après le collage.
+**Win+Alt+V** (ou `+` dans le lanceur) propose de coller ce que vous avez copié sous une autre forme. Le presse-papiers d'origine est restauré après le collage.
 
 | Contenu copié | Actions |
 |---|---|

@@ -1,4 +1,4 @@
-// Collage avancé (Win+Shift+V) : texte brut, Markdown, JSON, fichiers, OCR, transformations et IA (Claude).
+// Collage avancé (Win+Alt+V) : texte brut, Markdown, JSON, fichiers, OCR, transformations et IA (Claude).
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
@@ -456,7 +456,7 @@ Tableau Markdown = Convertis en tableau Markdown.
         public override string Prefix { get { return "+"; } }
         public override bool Global { get { return false; } }
         public override string HelpTitle { get { return "+  Collage avancé"; } }
-        public override string HelpText { get { return "texte brut, Markdown, JSON, fichier, texte d'une image, IA… · raccourci Win+Shift+V"; } }
+        public override string HelpText { get { return "texte brut, Markdown, JSON, fichier, texte d'une image, IA… · raccourci Win+Alt+V"; } }
 
         static string Preview(string s)
         {

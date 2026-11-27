@@ -106,7 +106,11 @@ namespace HoldKeys
             if (hook == IntPtr.Zero)
                 MessageBox.Show("Impossible d'installer le hook clavier.", "HoldKeys");
 
-            hotkeyWnd.Pressed += id => { if (id == 2) ShowPaste(); else ShowSearch(); };
+            hotkeyWnd.Pressed += id =>
+            {
+                try { if (id == 2) ShowPaste(); else ShowSearch(); }
+                catch (Exception ex) { Log("erreur à l'ouverture : " + ex); Notify("Erreur à l'ouverture du lanceur : " + ex.Message); }
+            };
             hotkeyWnd.ClipboardChanged += () => LauncherForm.Delay(60, ClipboardHistory.OnChanged);
             hotkeyWnd.ListenClipboard();
             RegisterSearchKey(false);
@@ -134,7 +138,7 @@ namespace HoldKeys
         LauncherForm search;
         List<Sym> symbols;
         string searchKey = "Win+Alt+Space";
-        string pasteKey = "Win+Shift+V";
+        string pasteKey = "Win+Alt+V";
         ToolStripMenuItem pasteItem;
 
         void RegisterSearchKey(bool notifyOk)
@@ -142,10 +146,23 @@ namespace HoldKeys
             bool ok = hotkeyWnd.Register(1, searchKey);
             if (searchItem != null) searchItem.ShortcutKeyDisplayString = ok ? searchKey : "";
             bool ok2 = hotkeyWnd.Register(2, pasteKey);
+            Log("enregistrement " + searchKey + " : " + (ok ? "ok" : "ÉCHEC") + " · " + pasteKey + " : " + (ok2 ? "ok" : "ÉCHEC"));
             if (pasteItem != null) pasteItem.ShortcutKeyDisplayString = ok2 ? pasteKey : "";
             foreach (var k in new[] { ok ? null : searchKey, ok2 ? null : pasteKey })
                 if (!string.IsNullOrEmpty(k) && tray != null)
                     tray.ShowBalloonTip(3000, "HoldKeys", "Le raccourci " + k + " est déjà utilisé par une autre application. Choisissez-en un autre dans Paramètres.", ToolTipIcon.Warning);
+        }
+
+        // Journal minimal (raccourcis, erreurs) à côté de l'exe, limité à ~200 Ko.
+        internal static void Log(string msg)
+        {
+            try
+            {
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "HoldKeys.log");
+                if (File.Exists(path) && new FileInfo(path).Length > 200000) File.Delete(path);
+                File.AppendAllText(path, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff") + "  " + msg + Environment.NewLine, Encoding.UTF8);
+            }
+            catch { }
         }
 
         internal void SettingsTab(int i) { if (settings != null && !settings.IsDisposed) settings.ShowTab(i); }

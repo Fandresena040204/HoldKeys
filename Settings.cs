@@ -15,7 +15,7 @@ namespace HoldKeys
         public bool Recent = true;
         public string SearchKey = "Win+Alt+Space";
         public bool Clipboard = true;
-        public string PasteKey = "Win+Shift+V";
+        public string PasteKey = "Win+Alt+V";
         public string AiModel = "claude-opus-5-5";
         public List<KeyValuePair<string, string[]>> Entries = new List<KeyValuePair<string, string[]>>();
 
@@ -49,7 +49,11 @@ namespace HoldKeys
                 if (key.Equals("searchkey", StringComparison.OrdinalIgnoreCase))
                 { c.SearchKey = val; continue; }
                 if (key.Equals("pastekey", StringComparison.OrdinalIgnoreCase))
-                { c.PasteKey = val; continue; }
+                {
+                    // Win+Shift+V est réservé par Windows 11 (notifications) : ancienne valeur par défaut remplacée.
+                    c.PasteKey = val.Equals("Win+Shift+V", StringComparison.OrdinalIgnoreCase) ? "Win+Alt+V" : val;
+                    continue;
+                }
                 if (key.Equals("aimodel", StringComparison.OrdinalIgnoreCase))
                 { if (val.StartsWith("claude-")) c.AiModel = val; continue; }
                 if (key.Equals("clipboard", StringComparison.OrdinalIgnoreCase))
@@ -277,7 +281,7 @@ namespace HoldKeys
             row(";", "texte rapide (liste et insertion)");
             row("v ", "historique du presse-papiers (Ctrl+Entrée : épingler, Maj+Suppr : effacer)");
             row("%", "actions sur le texte sélectionné : majuscules, sans accents, trier, traduire, compter…");
-            row("+", "collage avancé (Win+Shift+V) : texte brut, Markdown, JSON, fichier, texte d'une image, IA");
+            row("+", "collage avancé (Win+Alt+V) : texte brut, Markdown, JSON, fichier, texte d'une image, IA");
             row("C:\\ ~ %", "parcourir les dossiers (Tab : compléter)");
             row("mdp guid…", "générateurs : mdp 20, guid, date, heure, maintenant, timestamp, sha256 texte, lorem 30, nombre 1 100");
             row("verrouiller…", "commandes : verrouiller, veille, redémarrer, éteindre, vider la corbeille, éteindre l'écran");
