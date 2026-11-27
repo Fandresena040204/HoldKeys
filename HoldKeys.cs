@@ -118,6 +118,7 @@ namespace HoldKeys
             System.Threading.ThreadPool.RegisterWaitForSingleObject(showEvent,
                 delegate { popup.BeginInvoke((Action)ShowSettings); }, null, -1, false);
             if (openSettings) popup.BeginInvoke((Action)ShowSettings);
+            ScheduleTrim(8000); // après le démarrage
         }
 
         internal static Icon AppIcon;
@@ -163,6 +164,33 @@ namespace HoldKeys
                 File.AppendAllText(path, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff") + "  " + msg + Environment.NewLine, Encoding.UTF8);
             }
             catch { }
+        }
+
+        // ---------- Allègement mémoire ----------
+        // Quelques secondes après la fermeture du lanceur / des paramètres, on rend la mémoire inutilisée à Windows.
+        static System.Windows.Forms.Timer trimTimer;
+
+        internal static void ScheduleTrim(int ms = 15000)
+        {
+            if (trimTimer == null)
+            {
+                trimTimer = new System.Windows.Forms.Timer();
+                trimTimer.Tick += delegate { trimTimer.Stop(); Trim(); };
+            }
+            trimTimer.Stop();
+            trimTimer.Interval = ms;
+            trimTimer.Start();
+        }
+
+        static void Trim()
+        {
+            if (Instance != null && ((Instance.search != null && Instance.search.Visible) ||
+                                     (Instance.settings != null && !Instance.settings.IsDisposed && Instance.settings.Visible)))
+            { ScheduleTrim(); return; } // encore utilisé : on réessaie plus tard
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            Native.SetProcessWorkingSetSize(System.Diagnostics.Process.GetCurrentProcess().Handle, (IntPtr)(-1), (IntPtr)(-1));
         }
 
         internal void SettingsTab(int i) { if (settings != null && !settings.IsDisposed) settings.ShowTab(i); }
@@ -220,6 +248,7 @@ namespace HoldKeys
             if (settings == null || settings.IsDisposed)
             {
                 settings = new SettingsForm(cfgPath, LoadConfig, ClearRecent);
+                settings.FormClosed += delegate { ScheduleTrim(5000); };
                 settings.Show();
             }
             if (settings.WindowState == FormWindowState.Minimized) settings.WindowState = FormWindowState.Normal;
@@ -832,6 +861,7 @@ z = ž ź ż
         [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr hwnd, ref POINT p);
         [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd, int cmd);
         [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hwnd);
+        [DllImport("kernel32.dll")] public static extern bool SetProcessWorkingSetSize(IntPtr process, IntPtr min, IntPtr max);
         [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, int msg, IntPtr w, IntPtr l);
         [DllImport("user32.dll")] public static extern IntPtr SendMessageTimeout(IntPtr hwnd, int msg, IntPtr w, IntPtr l, int flags, int timeout, out IntPtr result);
         [DllImport("user32.dll")] public static extern bool LockWorkStation();

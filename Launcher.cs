@@ -306,6 +306,7 @@ namespace HoldKeys
             debounce.Interval = 180;
             debounce.Tick += delegate { debounce.Stop(); RunAsync(); };
             Deactivate += delegate { if (!choosing) Hide(); };
+            VisibleChanged += delegate { if (!Visible) TrayContext.ScheduleTrim(); };
             Native.SendMessage(box.Handle, 0x1501 /*EM_SETCUEBANNER*/, (IntPtr)1, "Rechercher une appli, un fichier, un calcul, un symbole…");
         }
 
