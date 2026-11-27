@@ -11,9 +11,31 @@ Petit utilitaire Windows pour taper les caractères spéciaux en **maintenant un
   - Relâcher la lettre insère le caractère choisi ; Échap annule.
   - Maj / Verr. Maj donnent les majuscules.
 - **Derniers caractères utilisés en premier** (historique conservé, effaçable).
-- **Recherche de symboles par nom** avec **Win+Alt+Espace** : tapez « flèche », « euro », « cœur », « e aigu »… puis Entrée pour insérer (Ctrl+Entrée pour copier). Plus de 400 symboles : lettres accentuées, typographie, monnaies, maths, grec, flèches, formes, emoji.
-- **Fenêtre Paramètres** (double-clic sur l'icône) : délais, raccourci de recherche, caractères par touche, démarrage avec Windows.
+- **Lanceur universel** avec **Win+Alt+Espace** (voir ci-dessous).
+- **Texte rapide** : tapez `;mail`, `;sig`, `;date`… n'importe où, l'abréviation est remplacée par votre texte.
+- **Historique du presse-papiers** chiffré avec votre compte Windows, avec épinglage (les mots de passe des gestionnaires sont ignorés).
+- **Fenêtre Paramètres** en onglets (double-clic sur l'icône) : délais, raccourci, caractères par touche, texte rapide, presse-papiers, démarrage avec Windows.
 - Icône dans la zone de notification, lancement automatique à l'ouverture de session.
+
+## Lanceur
+
+| Tapez | Pour |
+|---|---|
+| *(rien)* | applications (les plus utilisées en premier), fenêtres, calculs, paramètres Windows, commandes système, fichiers, symboles |
+| `=` | calculatrice et conversions : `2*(3+4)`, `sqrt(2)`, `15%`, `10 km en mi`, `30 c en f`, `1 go en mo`, `255 en hex` |
+| `<` | basculer vers une fenêtre ouverte (Ctrl+Entrée : la fermer) |
+| `?` | fichiers et dossiers de l'index Windows (Ctrl+Entrée : ouvrir l'emplacement) |
+| `>` | commande dans une invite (Ctrl+Entrée : en administrateur) |
+| `!` | recherche web : `!g`, `!yt`, `!w`, `!tr`, `!maps`, `!gh`, `!img`, `!ddg` |
+| `:` | symboles et emoji (plus de 400) : `:flèche`, `:euro`, `:e aigu` |
+| `;` | texte rapide |
+| `v ` | historique du presse-papiers (Ctrl+Entrée : épingler, Maj+Suppr : effacer) |
+| `%` | actions sur le texte sélectionné : majuscules, sans accents, trier, dédoublonner, encoder URL, traduire, compter |
+| `C:\…` `~` `%APPDATA%` | parcourir les dossiers (Tab : compléter) |
+| `mdp 20` `guid` `date` `sha256 …` `lorem 30` `nombre 1 100` | générateurs |
+| `verrouiller` `veille` `éteindre` `vider la corbeille`… | commandes système (confirmation pour les actions risquées) |
+
+Entrée : action principale (lancer, insérer, coller…) · Ctrl+Entrée : action secondaire · Tab : compléter · Échap : effacer puis fermer.
 
 ## Installation
 
@@ -39,7 +61,8 @@ Les réglages sont dans `HoldKeys.txt` à côté de l'exécutable (modifiable vi
 delay = 250              # ms de maintien avant qu'Espace ouvre le popup
 autoshow = 400           # ouverture automatique après X ms (0 = désactivé)
 recent = 1               # derniers caractères utilisés en premier
-searchkey = Win+Alt+Space
+searchkey = Win+Alt+Space  # raccourci du lanceur
+clipboard = 1            # historique du presse-papiers
 e = é è ê ë ē ę €        # une ligne par touche (a-z, 0-9)
 E = É È Ê Ë              # majuscules définies à part (optionnel)
 ```
@@ -48,9 +71,12 @@ E = É È Ê Ë              # majuscules définies à part (optionnel)
 
 | Fichier | Rôle |
 |---|---|
-| `HoldKeys.cs` | Hook clavier, popup, icône de notification, historique |
+| `HoldKeys.cs` | Hook clavier, popup, texte rapide, icône de notification, historique |
 | `Settings.cs` | Lecture/écriture de la config, fenêtre Paramètres |
-| `Search.cs` | Base de symboles, fenêtre de recherche, raccourci global |
+| `Search.cs` | Base de symboles, raccourci global, écoute du presse-papiers |
+| `Launcher.cs` | Fenêtre du lanceur, modèle de résultats, icônes, usage |
+| `Providers.cs` | Modules : applications, fenêtres, calcul, unités, chemins, URL, fichiers, web, système, commandes |
+| `Extras.cs` | Presse-papiers, texte rapide, générateurs, actions sur le texte, symboles |
 | `make-icon.ps1` | Génère `HoldKeys.ico` |
 | `build.ps1` | Compile `HoldKeys.exe` |
 

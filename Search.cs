@@ -393,214 +393,16 @@ $ dollar, monnaie
         }
     }
 
-    // ---------- Fenêtre de recherche ----------
-
-    class SearchForm : Form
-    {
-        static readonly Color Bg = Color.FromArgb(32, 32, 32);
-        static readonly Color Field = Color.FromArgb(48, 48, 48);
-        static readonly Color Accent = Color.FromArgb(0, 120, 215);
-
-        readonly Func<List<Sym>> getDb;
-        readonly Func<IList<string>> getRecent;
-        readonly Action<string> onChosen;
-        readonly TextBox box;
-        readonly ListBox list;
-        readonly Label hint;
-        readonly float scale;
-        readonly Font bigFont, nameFont, smallFont;
-        List<Sym> results = new List<Sym>();
-        IntPtr previous;
-        bool choosing;
-
-        public SearchForm(Func<List<Sym>> getDb, Func<IList<string>> getRecent, Action<string> onChosen)
-        {
-            this.getDb = getDb;
-            this.getRecent = getRecent;
-            this.onChosen = onChosen;
-
-            FormBorderStyle = FormBorderStyle.None;
-            StartPosition = FormStartPosition.Manual;
-            ShowInTaskbar = false;
-            TopMost = true;
-            KeyPreview = true;
-            BackColor = Bg;
-            Text = "HoldKeys — Recherche";
-            using (var g = CreateGraphics()) scale = g.DpiX / 96f;
-            bigFont = new Font("Segoe UI", 20 * scale, GraphicsUnit.Pixel);
-            nameFont = new Font("Segoe UI", 14 * scale, GraphicsUnit.Pixel);
-            smallFont = new Font("Segoe UI", 11 * scale, GraphicsUnit.Pixel);
-
-            int pad = S(12);
-            Size = new Size(S(520), S(440));
-            Padding = new Padding(pad);
-
-            box = new TextBox
-            {
-                Dock = DockStyle.Top,
-                BorderStyle = BorderStyle.None,
-                BackColor = Field,
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 16 * scale, GraphicsUnit.Pixel)
-            };
-            var boxPanel = new Panel { Dock = DockStyle.Top, Height = box.PreferredHeight + S(16), BackColor = Field, Padding = new Padding(S(10), S(8), S(10), S(8)) };
-            boxPanel.Controls.Add(box);
-
-            hint = new Label
-            {
-                Dock = DockStyle.Bottom,
-                Height = S(24),
-                ForeColor = Color.Gray,
-                Font = smallFont,
-                TextAlign = ContentAlignment.BottomLeft,
-                Text = "Entrée : insérer   ·   Ctrl+Entrée : copier   ·   Échap : fermer"
-            };
-
-            list = new ListBox
-            {
-                Dock = DockStyle.Fill,
-                BorderStyle = BorderStyle.None,
-                BackColor = Bg,
-                ForeColor = Color.White,
-                DrawMode = DrawMode.OwnerDrawFixed,
-                ItemHeight = S(40),
-                IntegralHeight = false
-            };
-            list.DrawItem += DrawItem;
-            list.HandleCreated += delegate { Native.SetWindowTheme(list.Handle, "DarkMode_Explorer", null); };
-            list.MouseClick += (s, e) => { int i = list.IndexFromPoint(e.Location); if (i >= 0) { list.SelectedIndex = i; Choose(false); } };
-
-            var spacer = new Panel { Dock = DockStyle.Top, Height = S(8), BackColor = Bg };
-            Controls.Add(list);
-            Controls.Add(hint);
-            Controls.Add(spacer);
-            Controls.Add(boxPanel);
-
-            box.TextChanged += delegate { RefreshResults(box.Text); };
-            Deactivate += delegate { if (!choosing) Hide(); };
-            Native.SendMessage(box.Handle, 0x1501 /*EM_SETCUEBANNER*/, (IntPtr)1, "Rechercher un symbole : flèche, euro, cœur, e aigu…");
-        }
-
-        int S(int v) { return (int)(v * scale); }
-
-        public void Open()
-        {
-            previous = Native.GetForegroundWindow();
-            Screen sc = previous != IntPtr.Zero ? Screen.FromHandle(previous) : Screen.PrimaryScreen;
-            Rectangle wa = sc.WorkingArea;
-            Location = new Point(wa.Left + (wa.Width - Width) / 2, wa.Top + (int)(wa.Height * 0.18));
-            using (var p = Popup.RoundRect(new RectangleF(0, 0, Width, Height), 10 * scale)) Region = new Region(p);
-            box.Text = "";
-            RefreshResults("");
-            Show();
-            Activate();
-            Native.SetForegroundWindow(Handle);
-            box.Focus();
-        }
-
-        void RefreshResults(string q)
-        {
-            results = SymbolDb.Search(getDb(), q, getRecent());
-            list.BeginUpdate();
-            list.Items.Clear();
-            int max = Math.Min(results.Count, 300);
-            for (int i = 0; i < max; i++) list.Items.Add(results[i].Ch);
-            list.EndUpdate();
-            if (list.Items.Count > 0) list.SelectedIndex = 0;
-        }
-
-        void DrawItem(object sender, DrawItemEventArgs e)
-        {
-            if (e.Index < 0 || e.Index >= results.Count) return;
-            var g = e.Graphics;
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            bool selected = (e.State & DrawItemState.Selected) != 0;
-            using (var b = new SolidBrush(Bg)) g.FillRectangle(b, e.Bounds);
-            var r = Rectangle.Inflate(e.Bounds, 0, -S(2));
-            if (selected)
-                using (var b = new SolidBrush(Accent))
-                using (var p = Popup.RoundRect(r, 6 * scale)) g.FillPath(b, p);
-            var s = results[e.Index];
-            var chRect = new Rectangle(r.X, r.Y, S(56), r.Height);
-            TextRenderer.DrawText(g, s.Ch, bigFont, chRect, Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-            string name = s.Name;
-            int comma = name.IndexOf(',');
-            string main = comma > 0 ? name.Substring(0, comma) : name;
-            var nameRect = new Rectangle(chRect.Right + S(6), r.Y, r.Width - chRect.Width - S(12), r.Height);
-            TextRenderer.DrawText(g, main, nameFont, nameRect, Color.White, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
-            if (getRecent().Contains(s.Ch))
-                TextRenderer.DrawText(g, "récent", smallFont, nameRect, selected ? Color.FromArgb(200, 225, 255) : Color.Gray,
-                    TextFormatFlags.VerticalCenter | TextFormatFlags.Right | TextFormatFlags.NoPadding);
-        }
-
-        protected override void OnKeyDown(KeyEventArgs e)
-        {
-            int n = list.Items.Count;
-            switch (e.KeyCode)
-            {
-                case Keys.Escape: Hide(); RestoreFocus(); break;
-                case Keys.Enter: if (n > 0) Choose(e.Control); break;
-                case Keys.Down: if (n > 0) list.SelectedIndex = Math.Min(n - 1, list.SelectedIndex + 1); break;
-                case Keys.Up: if (n > 0) list.SelectedIndex = Math.Max(0, list.SelectedIndex - 1); break;
-                case Keys.PageDown: if (n > 0) list.SelectedIndex = Math.Min(n - 1, list.SelectedIndex + 8); break;
-                case Keys.PageUp: if (n > 0) list.SelectedIndex = Math.Max(0, list.SelectedIndex - 8); break;
-                default: return;
-            }
-            e.Handled = true;
-            e.SuppressKeyPress = true;
-        }
-
-        void Choose(bool copyOnly)
-        {
-            if (list.SelectedIndex < 0 || list.SelectedIndex >= results.Count) return;
-            string s = results[list.SelectedIndex].Ch;
-            onChosen(s);
-            if (copyOnly)
-            {
-                try { Clipboard.SetText(s); } catch { }
-                hint.Text = "« " + s + " » copié dans le presse-papiers";
-                return;
-            }
-            choosing = true;
-            Hide();
-            choosing = false;
-            RestoreFocus();
-            // Laisse le temps à la fenêtre d'origine de reprendre le focus avant de taper.
-            var t = new Timer { Interval = 60 };
-            t.Tick += delegate { t.Stop(); t.Dispose(); TrayContext.SendText(s, false); };
-            t.Start();
-        }
-
-        void RestoreFocus()
-        {
-            if (previous != IntPtr.Zero) Native.SetForegroundWindow(previous);
-        }
-
-        protected override void OnVisibleChanged(EventArgs e)
-        {
-            base.OnVisibleChanged(e);
-            if (Visible) hint.Text = "Entrée : insérer   ·   Ctrl+Entrée : copier   ·   Échap : fermer";
-        }
-
-        protected override CreateParams CreateParams
-        {
-            get
-            {
-                var cp = base.CreateParams;
-                cp.ExStyle |= 0x80; // TOOLWINDOW : pas dans Alt+Tab
-                return cp;
-            }
-        }
-    }
-
     // ---------- Raccourci clavier global ----------
 
     class HotkeyWindow : NativeWindow
     {
-        public event Action Pressed;
+        public event Action Pressed, ClipboardChanged;
         bool registered;
 
         public HotkeyWindow() { CreateHandle(new CreateParams()); }
+
+        public void ListenClipboard() { Native.AddClipboardFormatListener(Handle); }
 
         public bool Register(string spec)
         {
@@ -620,6 +422,7 @@ $ dollar, monnaie
         protected override void WndProc(ref Message m)
         {
             if (m.Msg == 0x0312 /*WM_HOTKEY*/ && Pressed != null) Pressed();
+            if (m.Msg == 0x031D /*WM_CLIPBOARDUPDATE*/ && ClipboardChanged != null) ClipboardChanged();
             base.WndProc(ref m);
         }
     }

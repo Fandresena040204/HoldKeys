@@ -1,3 +1,7 @@
 HoldKeys.exe
-*.recent.txt
 *.pdb
+# Données personnelles (créées à côté de l'exe installé)
+*.recent.txt
+*.usage.txt
+*.clipboard.dat
+HoldKeys.snippets.txt

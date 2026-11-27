@@ -62,6 +62,10 @@ namespace HoldKeys
 
         public TrayContext(System.Threading.WaitHandle showEvent, bool openSettings)
         {
+            Instance = this;
+            string dir = Path.GetDirectoryName(cfgPath);
+            Usage.Load(dir);
+            ClipboardHistory.Init(dir);
             LoadConfig();
             popup = new Popup();
             var h = popup.Handle; // force la création du handle (BeginInvoke)
@@ -78,7 +82,7 @@ namespace HoldKeys
             menu.Opening += delegate { startup.Checked = IsAutoStart(); };
             var settingsItem = new ToolStripMenuItem("Paramètres…", null, delegate { ShowSettings(); });
             settingsItem.Font = new Font(settingsItem.Font, FontStyle.Bold);
-            searchItem = new ToolStripMenuItem("Rechercher un symbole…", null, delegate { ShowSearch(); });
+            searchItem = new ToolStripMenuItem("Ouvrir le lanceur…", null, delegate { ShowSearch(); });
             menu.Items.Add(settingsItem);
             menu.Items.Add(searchItem);
             menu.Items.Add("Ouvrir le fichier de configuration", null, delegate { System.Diagnostics.Process.Start("notepad.exe", "\"" + cfgPath + "\""); });
@@ -101,6 +105,8 @@ namespace HoldKeys
                 MessageBox.Show("Impossible d'installer le hook clavier.", "HoldKeys");
 
             hotkeyWnd.Pressed += ShowSearch;
+            hotkeyWnd.ClipboardChanged += () => LauncherForm.Delay(60, ClipboardHistory.OnChanged);
+            hotkeyWnd.ListenClipboard();
             RegisterSearchKey(false);
 
             System.Threading.ThreadPool.RegisterWaitForSingleObject(showEvent,
@@ -111,11 +117,19 @@ namespace HoldKeys
         internal static Icon AppIcon;
         SettingsForm settings;
 
-        // ---------- Recherche de symboles ----------
+        internal static TrayContext Instance;
+
+        internal static void Notify(string text)
+        {
+            if (Instance != null && Instance.tray != null)
+                Instance.tray.ShowBalloonTip(4000, "HoldKeys", text, ToolTipIcon.Info);
+        }
+
+        // ---------- Lanceur ----------
 
         readonly HotkeyWindow hotkeyWnd = new HotkeyWindow();
         ToolStripMenuItem searchItem;
-        SearchForm search;
+        LauncherForm search;
         List<Sym> symbols;
         string searchKey = "Win+Alt+Space";
 
@@ -130,10 +144,30 @@ namespace HoldKeys
         void ShowSearch()
         {
             if (search == null || search.IsDisposed)
-                search = new SearchForm(
-                    () => symbols ?? (symbols = SymbolDb.Build(EntriesFromMap())),
-                    () => { List<string> r; return recent.TryGetValue("*", out r) ? (IList<string>)r : new string[0]; },
-                    s => Remember("*", s));
+            {
+                Action settingsAct = () => popup.BeginInvoke((Action)ShowSettings);
+                var providers = new List<Provider>
+                {
+                    new AppsProvider(),
+                    new WindowsProvider(),
+                    new CalcProvider(),
+                    new PathProvider(),
+                    new UrlProvider(),
+                    new FilesProvider(),
+                    new SystemProvider(settingsAct),
+                    new ShellProvider(),
+                    new GeneratorsProvider(),
+                    new TextActionsProvider(),
+                    new SymbolsProvider(
+                        () => symbols ?? (symbols = SymbolDb.Build(EntriesFromMap())),
+                        () => { List<string> r; return recent.TryGetValue("*", out r) ? (IList<string>)r : new string[0]; },
+                        s => Remember("*", s)),
+                    new ClipboardProvider(),
+                    new SnippetsProvider(() => popup.BeginInvoke((Action)(() => { ShowSettings(); settings.ShowTab(2); }))),
+                    new WebProvider(),
+                };
+                search = new LauncherForm(providers);
+            }
             search.Open();
         }
 
@@ -142,7 +176,7 @@ namespace HoldKeys
             foreach (var kv in map) yield return kv;
         }
 
-        void ShowSettings()
+        internal void ShowSettings()
         {
             if (settings == null || settings.IsDisposed)
             {
@@ -199,6 +233,7 @@ namespace HoldKeys
 
             // Répétition automatique de la lettre maintenue : on l'avale si elle a des variantes.
             if (vk == heldVk) return popupOn || Lookup(vk, heldUpper) != null;
+            if (!popupOn) TrackSnippet(k);
 
             if (popupOn)
             {
@@ -284,6 +319,7 @@ namespace HoldKeys
         void Commit(string s)
         {
             popupOn = false;
+            typed.Length = 0;
             string key = curKey;
             popup.BeginInvoke((Action)(() => { popup.HideNow(); SendReplace(s); Remember(key, s); Remember("*", s); }));
         }
@@ -392,20 +428,58 @@ namespace HoldKeys
 
         static void SendReplace(string s) { SendText(s, true); }
 
-        internal static void SendText(string s, bool backspace)
+        internal static void SendText(string s, bool backspace) { SendText(s, backspace ? 1 : 0); }
+
+        // Efface `backspaces` caractères puis tape le texte (retours à la ligne = touche Entrée).
+        internal static void SendText(string s, int backspaces)
         {
             var list = new List<Native.INPUT>();
-            if (backspace)
+            for (int i = 0; i < backspaces; i++)
             {
                 list.Add(Native.KeyInput((ushort)VK_BACK, '\0', 0));
                 list.Add(Native.KeyInput((ushort)VK_BACK, '\0', 2 /*KEYUP*/));
             }
             foreach (char c in s)
             {
+                if (c == '\r') continue;
+                if (c == '\n')
+                {
+                    list.Add(Native.KeyInput(0x0D, '\0', 0));
+                    list.Add(Native.KeyInput(0x0D, '\0', 2));
+                    continue;
+                }
                 list.Add(Native.KeyInput(0, c, 4 /*UNICODE*/));
                 list.Add(Native.KeyInput(0, c, 4 | 2));
             }
             Native.SendInput((uint)list.Count, list.ToArray(), Marshal.SizeOf(typeof(Native.INPUT)));
+        }
+
+        // ---------- Texte rapide : suivi des dernières frappes ----------
+
+        readonly StringBuilder typed = new StringBuilder();
+        IntPtr typedWindow;
+
+        void TrackSnippet(Native.KBDLLHOOKSTRUCT k)
+        {
+            if (SnippetStore.Items.Count == 0) return;
+            uint vk = k.vkCode;
+            if (IsModifier(vk)) return;
+            IntPtr fg = Native.GetForegroundWindow();
+            if (fg != typedWindow) { typed.Length = 0; typedWindow = fg; }
+            if (vk == VK_BACK) { if (typed.Length > 0) typed.Length--; return; }
+            bool altGr = Down(VK_CONTROL) && Down(VK_MENU);
+            if ((Down(VK_CONTROL) || Down(VK_MENU) || Down(0x5B) || Down(0x5C)) && !altGr) { typed.Length = 0; return; }
+            string ch = Native.CharFor(k, fg);
+            if (string.IsNullOrEmpty(ch) || ch[0] < 0x20) { typed.Length = 0; return; }
+            typed.Append(ch);
+            if (typed.Length > 64) typed.Remove(0, typed.Length - 64);
+            string trig = SnippetStore.Find(typed.ToString());
+            if (trig == null) return;
+            typed.Length = 0;
+            string text = SnippetStore.TextOf(trig);
+            int n = trig.Length;
+            // Après le hook : la dernière touche de l'abréviation est déjà dans la file, on l'efface aussi.
+            popup.BeginInvoke((Action)(() => SendText(SnippetStore.Expand(text), n)));
         }
 
         // ---------- Configuration ----------
@@ -465,6 +539,8 @@ z = ž ź ż
                 delayMs = c.Delay;
                 autoShowMs = c.AutoShow;
                 useRecent = c.Recent;
+                ClipboardHistory.Enabled = c.Clipboard;
+                SnippetStore.Load(Path.GetDirectoryName(cfgPath));
                 map = c.ToMap();
                 symbols = null; // reconstruit à la prochaine recherche (nouveaux caractères de la config)
                 LoadRecent();
@@ -714,6 +790,93 @@ z = ž ź ż
         [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr hwnd, ref POINT p);
         [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd, int cmd);
         [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hwnd);
+        [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, int msg, IntPtr w, IntPtr l);
+        [DllImport("user32.dll")] public static extern IntPtr SendMessageTimeout(IntPtr hwnd, int msg, IntPtr w, IntPtr l, int flags, int timeout, out IntPtr result);
+        [DllImport("user32.dll")] public static extern bool LockWorkStation();
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)] public static extern int SHEmptyRecycleBin(IntPtr hwnd, string root, int flags);
+        [DllImport("user32.dll")] public static extern bool AddClipboardFormatListener(IntPtr hwnd);
+        [DllImport("user32.dll")] public static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
+        [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hwnd);
+        [DllImport("user32.dll")] static extern bool IsIconic(IntPtr hwnd);
+        [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr hwnd, int cmd);
+        [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr hwnd, int index);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr hwnd, StringBuilder sb, int max);
+        [DllImport("user32.dll")] static extern int GetWindowTextLength(IntPtr hwnd);
+        delegate bool EnumProc(IntPtr hwnd, IntPtr l);
+        [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc fn, IntPtr l);
+        [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out int value, int size);
+        [DllImport("user32.dll", EntryPoint = "GetClassLongPtrW")] static extern IntPtr GetClassLongPtr64(IntPtr hwnd, int index);
+        [DllImport("user32.dll", EntryPoint = "GetClassLongW")] static extern uint GetClassLong32(IntPtr hwnd, int index);
+        [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(int access, bool inherit, uint pid);
+        [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool QueryFullProcessImageName(IntPtr h, int flags, StringBuilder sb, ref int size);
+        [DllImport("user32.dll")] static extern IntPtr GetKeyboardLayout(uint tid);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int ToUnicodeEx(uint vk, uint scan, byte[] state, StringBuilder sb, int size, uint flags, IntPtr hkl);
+
+        public static IntPtr GetClassLongPtrSafe(IntPtr hwnd, int index)
+        {
+            return IntPtr.Size == 8 ? GetClassLongPtr64(hwnd, index) : new IntPtr((int)GetClassLong32(hwnd, index));
+        }
+
+        public static string WindowText(IntPtr hwnd)
+        {
+            var sb = new StringBuilder(GetWindowTextLength(hwnd) + 1);
+            GetWindowText(hwnd, sb, sb.Capacity);
+            return sb.ToString();
+        }
+
+        // Fenêtres principales visibles (comme Alt+Tab).
+        public static List<IntPtr> TopWindows()
+        {
+            var res = new List<IntPtr>();
+            EnumWindows((h, l) =>
+            {
+                if (!IsWindowVisible(h) || GetWindowTextLength(h) == 0 || GetWindow(h, 4 /*GW_OWNER*/) != IntPtr.Zero) return true;
+                int ex = GetWindowLong(h, -20 /*GWL_EXSTYLE*/);
+                if ((ex & 0x80) != 0 && (ex & 0x40000) == 0) return true; // TOOLWINDOW sans APPWINDOW
+                int cloaked;
+                if (DwmGetWindowAttribute(h, 14 /*DWMWA_CLOAKED*/, out cloaked, 4) == 0 && cloaked != 0) return true;
+                res.Add(h);
+                return true;
+            }, IntPtr.Zero);
+            return res;
+        }
+
+        public static void Activate(IntPtr hwnd)
+        {
+            if (IsIconic(hwnd)) ShowWindow(hwnd, 9 /*SW_RESTORE*/);
+            SetForegroundWindow(hwnd);
+        }
+
+        public static string ProcessPath(IntPtr hwnd)
+        {
+            uint pid;
+            GetWindowThreadProcessId(hwnd, out pid);
+            IntPtr h = OpenProcess(0x1000 /*QUERY_LIMITED_INFORMATION*/, false, pid);
+            if (h == IntPtr.Zero) return null;
+            try
+            {
+                var sb = new StringBuilder(1024);
+                int size = sb.Capacity;
+                return QueryFullProcessImageName(h, 0, sb, ref size) ? sb.ToString() : null;
+            }
+            finally { CloseHandle(h); }
+        }
+
+        // Caractère produit par une touche dans la disposition clavier de la fenêtre active, sans perturber les touches mortes.
+        public static string CharFor(KBDLLHOOKSTRUCT k, IntPtr fg)
+        {
+            uint pid;
+            IntPtr hkl = GetKeyboardLayout(GetWindowThreadProcessId(fg, out pid));
+            var state = new byte[256];
+            if ((GetKeyState(0x10) & 0x8000) != 0) state[0x10] = 0x80;
+            if ((GetKeyState(0x14) & 1) != 0) state[0x14] = 1;
+            if ((GetKeyState(0x11) & 0x8000) != 0) state[0x11] = 0x80;
+            if ((GetKeyState(0x12) & 0x8000) != 0) state[0x12] = 0x80;
+            var sb = new StringBuilder(8);
+            int n = ToUnicodeEx(k.vkCode, k.scanCode, state, sb, sb.Capacity, 4 /*ne pas modifier l'état*/, hkl);
+            return n > 0 ? sb.ToString(0, n) : null;
+        }
         [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)] public static extern int SetWindowTheme(IntPtr hwnd, string app, string idList);
         [DllImport("user32.dll")] public static extern bool RegisterHotKey(IntPtr hwnd, int id, uint mod, uint vk);
         [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hwnd, int id);
