@@ -15,6 +15,8 @@ namespace HoldKeys
         public bool Recent = true;
         public string SearchKey = "Win+Alt+Space";
         public bool Clipboard = true;
+        public string PasteKey = "Win+Shift+V";
+        public string AiModel = "claude-opus-5-5";
         public List<KeyValuePair<string, string[]>> Entries = new List<KeyValuePair<string, string[]>>();
 
         public static Config Default()
@@ -46,6 +48,10 @@ namespace HoldKeys
                 { if (int.TryParse(val, out d)) c.AutoShow = Math.Max(0, d); continue; }
                 if (key.Equals("searchkey", StringComparison.OrdinalIgnoreCase))
                 { c.SearchKey = val; continue; }
+                if (key.Equals("pastekey", StringComparison.OrdinalIgnoreCase))
+                { c.PasteKey = val; continue; }
+                if (key.Equals("aimodel", StringComparison.OrdinalIgnoreCase))
+                { if (val.StartsWith("claude-")) c.AiModel = val; continue; }
                 if (key.Equals("clipboard", StringComparison.OrdinalIgnoreCase))
                 { c.Clipboard = val != "0" && !val.Equals("false", StringComparison.OrdinalIgnoreCase); continue; }
                 if (key.Equals("recent", StringComparison.OrdinalIgnoreCase))
@@ -89,6 +95,12 @@ namespace HoldKeys
             sb.AppendLine();
             sb.AppendLine("# Historique du presse-papiers (1 = oui, 0 = non)");
             sb.AppendLine("clipboard = " + (Clipboard ? 1 : 0));
+            sb.AppendLine();
+            sb.AppendLine("# Raccourci du collage avancé (vide = désactivé)");
+            sb.AppendLine("pastekey = " + PasteKey);
+            sb.AppendLine();
+            sb.AppendLine("# Modèle Claude pour les actions IA du collage avancé");
+            sb.AppendLine("aimodel = " + AiModel);
             sb.AppendLine();
             foreach (var e in Entries) sb.AppendLine(e.Key + " = " + string.Join(" ", e.Value));
             File.WriteAllText(path, sb.ToString(), new UTF8Encoding(true));
@@ -138,14 +150,17 @@ namespace HoldKeys
             tabs.TabPages.Add(Page("Général", BuildGeneral()));
             tabs.TabPages.Add(Page("Caractères", BuildChars()));
             tabs.TabPages.Add(Page("Texte rapide", BuildSnippets()));
+            tabs.TabPages.Add(Page("Collage avancé", BuildPaste()));
             tabs.TabPages.Add(Page("Lanceur", BuildLauncherHelp()));
             root.Controls.Add(tabs, 0, 0);
             root.Controls.Add(BuildTest(), 0, 1);
             root.Controls.Add(BuildButtons(), 0, 2);
 
-            Fill(Config.Load(path));
+            var cfg = Config.Load(path);
+            Fill(cfg);
             chkStart.Checked = TrayContext.IsAutoStart();
             FillSnippets();
+            FillPaste(cfg);
         }
 
         TabControl tabs;
@@ -262,6 +277,7 @@ namespace HoldKeys
             row(";", "texte rapide (liste et insertion)");
             row("v ", "historique du presse-papiers (Ctrl+Entrée : épingler, Maj+Suppr : effacer)");
             row("%", "actions sur le texte sélectionné : majuscules, sans accents, trier, traduire, compter…");
+            row("+", "collage avancé (Win+Shift+V) : texte brut, Markdown, JSON, fichier, texte d'une image, IA");
             row("C:\\ ~ %", "parcourir les dossiers (Tab : compléter)");
             row("mdp guid…", "générateurs : mdp 20, guid, date, heure, maintenant, timestamp, sha256 texte, lorem 30, nombre 1 100");
             row("verrouiller…", "commandes : verrouiller, veille, redémarrer, éteindre, vider la corbeille, éteindre l'écran");
@@ -269,6 +285,92 @@ namespace HoldKeys
             t.Controls.Add(keys);
             t.SetColumnSpan(keys, 2);
             return t;
+        }
+
+        TextBox txtPasteKey, txtApiKey;
+        ComboBox cmbModel;
+        DataGridView aiGrid;
+
+        Control BuildPaste()
+        {
+            var t = new TableLayoutPanel { ColumnCount = 1, RowCount = 4 };
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            t.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            t.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            t.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            t.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            var top = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 3 };
+            top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            txtPasteKey = new TextBox { ReadOnly = true, Width = 130, Anchor = AnchorStyles.Left, BackColor = SystemColors.Window, Cursor = Cursors.Hand };
+            txtPasteKey.KeyDown += CaptureHotkey;
+            top.Controls.Add(Lbl("Raccourci du collage avancé"), 0, 0);
+            top.Controls.Add(txtPasteKey, 1, 0);
+            top.Controls.Add(Hint("(Retour arrière = aucun)"), 2, 0);
+
+            txtApiKey = new TextBox { Width = 260, UseSystemPasswordChar = true, Anchor = AnchorStyles.Left };
+            var getKey = new LinkLabel { Text = "Obtenir une clé", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 7, 3, 3) };
+            getKey.LinkClicked += delegate { Open.Shell("https://platform.claude.com/settings/keys"); };
+            top.Controls.Add(Lbl("Clé API Claude (optionnelle)"), 0, 1);
+            top.Controls.Add(txtApiKey, 1, 1);
+            top.Controls.Add(getKey, 2, 1);
+
+            cmbModel = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 260, Anchor = AnchorStyles.Left };
+            foreach (var m in Claude.Models) cmbModel.Items.Add(m[1]);
+            top.Controls.Add(Lbl("Modèle"), 0, 2);
+            top.Controls.Add(cmbModel, 1, 2);
+            t.Controls.Add(top, 0, 0);
+
+            var note = Hint("Les actions IA envoient le contenu copié à l'API Claude d'Anthropic, uniquement quand vous en choisissez une ; elles sont facturées sur votre compte API. " +
+                            "La clé est stockée chiffrée avec votre compte Windows. Sans clé, tout le reste du collage avancé fonctionne hors ligne.");
+            note.MaximumSize = new Size(580, 0);
+            note.Margin = new Padding(3, 8, 3, 6);
+            t.Controls.Add(note, 0, 1);
+
+            aiGrid = new DataGridView
+            {
+                Dock = DockStyle.Fill,
+                AllowUserToAddRows = true,
+                AllowUserToResizeRows = false,
+                RowHeadersVisible = false,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                BackgroundColor = SystemColors.Window,
+                BorderStyle = BorderStyle.FixedSingle,
+                SelectionMode = DataGridViewSelectionMode.CellSelect,
+                MultiSelect = false,
+                EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2,
+                ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize,
+                Margin = new Padding(3, 4, 3, 6)
+            };
+            aiGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Action IA", FillWeight = 30 });
+            aiGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Instruction donnée à Claude", FillWeight = 70 });
+            aiGrid.RowTemplate.Height = (int)(26 * DeviceScale());
+            aiGrid.CellDoubleClick += (s, e) => { if (e.RowIndex >= 0) aiGrid.BeginEdit(true); };
+            t.Controls.Add(aiGrid, 0, 2);
+
+            var del = new Button { Text = "Supprimer la ligne", AutoSize = true };
+            del.Click += delegate
+            {
+                var c = aiGrid.CurrentCell;
+                if (c != null && !aiGrid.Rows[c.RowIndex].IsNewRow) aiGrid.Rows.RemoveAt(c.RowIndex);
+            };
+            var bar = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0) };
+            bar.Controls.Add(del);
+            bar.Controls.Add(Hint("Dans le collage avancé, tapez aussi une instruction libre : « en tableau », « en espagnol »…"));
+            t.Controls.Add(bar, 0, 3);
+            return t;
+        }
+
+        void FillPaste(Config c)
+        {
+            txtPasteKey.Text = c.PasteKey;
+            int idx = Array.FindIndex(Claude.Models, m => m[0] == c.AiModel);
+            cmbModel.SelectedIndex = idx >= 0 ? idx : 0;
+            try { txtApiKey.Text = Claude.ApiKey; } catch { }
+            aiGrid.Rows.Clear();
+            foreach (var kv in Claude.Actions) aiGrid.Rows.Add(kv.Key, kv.Value);
         }
 
         void FillSnippets()
@@ -444,7 +546,30 @@ namespace HoldKeys
                 snippets.Add(new KeyValuePair<string, string>(trig, SnippetStore.Unescape(text)));
             }
 
-            var c = new Config { AutoShow = (int)numAuto.Value, Delay = (int)numDelay.Value, Recent = chkRecent.Checked, SearchKey = txtSearchKey.Text.Trim(), Clipboard = chkClipboard.Checked };
+            aiGrid.EndEdit();
+            var aiActions = new List<KeyValuePair<string, string>>();
+            foreach (DataGridViewRow r in aiGrid.Rows)
+            {
+                if (r.IsNewRow) continue;
+                string name = Convert.ToString(r.Cells[0].Value).Trim();
+                string instr = Convert.ToString(r.Cells[1].Value).Trim();
+                if (name.Length == 0 && instr.Length == 0) continue;
+                if (name.Length == 0 || instr.Length == 0)
+                {
+                    tabs.SelectedIndex = 3;
+                    aiGrid.CurrentCell = r.Cells[name.Length == 0 ? 0 : 1];
+                    MessageBox.Show(this, "Chaque action IA a besoin d'un nom et d'une instruction.", "HoldKeys", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                aiActions.Add(new KeyValuePair<string, string>(name.Replace(" = ", " – "), instr));
+            }
+
+            var c = new Config
+            {
+                AutoShow = (int)numAuto.Value, Delay = (int)numDelay.Value, Recent = chkRecent.Checked, SearchKey = txtSearchKey.Text.Trim(),
+                Clipboard = chkClipboard.Checked, PasteKey = txtPasteKey.Text.Trim(),
+                AiModel = Claude.Models[Math.Max(0, cmbModel.SelectedIndex)][0]
+            };
             var seen = new HashSet<string>();
             foreach (DataGridViewRow r in grid.Rows)
             {
@@ -469,6 +594,8 @@ namespace HoldKeys
             {
                 c.Save(path);
                 SnippetStore.Save(snippets);
+                Claude.SaveActions(aiActions);
+                Claude.ApiKey = txtApiKey.Text.Trim();
                 TrayContext.SetAutoStart(chkStart.Checked);
             }
             catch (Exception ex)
@@ -486,10 +613,11 @@ namespace HoldKeys
             e.Handled = true;
             Keys k = e.KeyCode;
             bool win = (Native.GetKeyState(0x5B) & 0x8000) != 0 || (Native.GetKeyState(0x5C) & 0x8000) != 0;
-            if ((k == Keys.Back || k == Keys.Delete) && !e.Control && !e.Alt && !e.Shift && !win) { txtSearchKey.Text = ""; return; }
+            var target = (TextBox)sender;
+            if ((k == Keys.Back || k == Keys.Delete) && !e.Control && !e.Alt && !e.Shift && !win) { target.Text = ""; return; }
             if (k == Keys.ControlKey || k == Keys.ShiftKey || k == Keys.Menu || k == Keys.LWin || k == Keys.RWin) return;
             if (!e.Control && !e.Alt && !win) return; // au moins Ctrl, Alt ou Win
-            txtSearchKey.Text = Hotkey.Format(k, e.Control, e.Alt, e.Shift, win);
+            target.Text = Hotkey.Format(k, e.Control, e.Alt, e.Shift, win);
         }
 
         float DeviceScale() { using (var g = CreateGraphics()) return g.DpiX / 96f; }

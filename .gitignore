@@ -5,3 +5,5 @@ HoldKeys.exe
 *.usage.txt
 *.clipboard.dat
 HoldKeys.snippets.txt
+HoldKeys.ai.txt
+*.ai.dat

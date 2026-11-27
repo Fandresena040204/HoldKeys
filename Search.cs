@@ -397,31 +397,38 @@ $ dollar, monnaie
 
     class HotkeyWindow : NativeWindow
     {
-        public event Action Pressed, ClipboardChanged;
-        bool registered;
+        public event Action<int> Pressed;
+        public event Action ClipboardChanged;
+        readonly HashSet<int> registered = new HashSet<int>();
 
         public HotkeyWindow() { CreateHandle(new CreateParams()); }
 
         public void ListenClipboard() { Native.AddClipboardFormatListener(Handle); }
 
-        public bool Register(string spec)
+        public bool Register(int id, string spec)
         {
-            Unregister();
+            Unregister(id);
             uint mod, vk;
             if (string.IsNullOrEmpty(spec) || !Hotkey.TryParse(spec, out mod, out vk)) return false;
-            registered = Native.RegisterHotKey(Handle, 1, mod | 0x4000 /*NOREPEAT*/, vk);
-            return registered;
+            if (!Native.RegisterHotKey(Handle, id, mod | 0x4000 /*NOREPEAT*/, vk)) return false;
+            registered.Add(id);
+            return true;
+        }
+
+        public void Unregister(int id)
+        {
+            if (registered.Remove(id)) Native.UnregisterHotKey(Handle, id);
         }
 
         public void Unregister()
         {
-            if (registered) Native.UnregisterHotKey(Handle, 1);
-            registered = false;
+            foreach (int id in new List<int>(registered)) Native.UnregisterHotKey(Handle, id);
+            registered.Clear();
         }
 
         protected override void WndProc(ref Message m)
         {
-            if (m.Msg == 0x0312 /*WM_HOTKEY*/ && Pressed != null) Pressed();
+            if (m.Msg == 0x0312 /*WM_HOTKEY*/ && Pressed != null) Pressed(m.WParam.ToInt32());
             if (m.Msg == 0x031D /*WM_CLIPBOARDUPDATE*/ && ClipboardChanged != null) ClipboardChanged();
             base.WndProc(ref m);
         }

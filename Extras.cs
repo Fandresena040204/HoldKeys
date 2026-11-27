@@ -400,30 +400,32 @@ namespace HoldKeys
         public override string HelpTitle { get { return "%  Actions sur le texte sélectionné"; } }
         public override string HelpText { get { return "sélectionnez du texte puis : majuscules, sans accents, trier, traduire, compter…"; } }
 
-        class Act { public string Id, Title, Words; public Func<string, string> T; public Action<string> O; }
-        readonly List<Act> acts = new List<Act>();
+        public class Act { public string Id, Title, PasteTitle, Words; public Func<string, string> T; public Action<string> O; }
+        internal static readonly List<Act> All = new List<Act>();
+        readonly List<Act> acts = All;
         static readonly CultureInfo Cul = CultureInfo.CurrentCulture;
 
-        public TextActionsProvider()
+        // Transformations partagées avec le collage avancé (PasteTitle).
+        static TextActionsProvider()
         {
-            A("upper", "MAJUSCULES", "majuscules maj upper", s => s.ToUpper(Cul));
-            A("lower", "minuscules", "minuscules min lower", s => s.ToLower(Cul));
-            A("title", "Première Lettre En Majuscule", "titre title capitaliser mots", s => Cul.TextInfo.ToTitleCase(s.ToLower(Cul)));
-            A("sentence", "Phrase normale (majuscule au début)", "phrase sentence", Sentence);
-            A("swap", "iNVERSER LA cASSE", "inverser casse swap", s => new string(s.Select(c => char.IsUpper(c) ? char.ToLower(c) : char.ToUpper(c)).ToArray()));
-            A("noaccent", "Supprimer les accents", "sans accents enlever", TextOps.RemoveAccents);
-            A("spaces", "Supprimer les espaces en trop", "espaces trim nettoyer", s => string.Join("\n", s.Replace("\r\n", "\n").Split('\n').Select(l => Regex.Replace(l, @"[ \t]+", " ").Trim())));
-            A("sort", "Trier les lignes", "trier lignes sort alphabetique", s => string.Join("\r\n", s.Replace("\r\n", "\n").Split('\n').OrderBy(l => l, StringComparer.Create(Cul, true))));
-            A("dedup", "Supprimer les lignes en double", "doublons lignes unique", s => string.Join("\r\n", s.Replace("\r\n", "\n").Split('\n').Distinct()));
-            A("urlenc", "Encoder pour une URL", "url encoder encode", Uri.EscapeDataString);
-            A("urldec", "Décoder une URL", "url decoder decode", Uri.UnescapeDataString);
+            A("upper", "MAJUSCULES", "Coller en MAJUSCULES", "majuscules maj upper", s => s.ToUpper(Cul));
+            A("lower", "minuscules", "Coller en minuscules", "minuscules min lower", s => s.ToLower(Cul));
+            A("title", "Première Lettre En Majuscule", "Coller avec une majuscule à chaque mot", "titre title capitaliser mots", s => Cul.TextInfo.ToTitleCase(s.ToLower(Cul)));
+            A("sentence", "Phrase normale (majuscule au début)", "Coller en phrase normale", "phrase sentence", Sentence);
+            A("swap", "iNVERSER LA cASSE", "Coller avec la casse inversée", "inverser casse swap", s => new string(s.Select(c => char.IsUpper(c) ? char.ToLower(c) : char.ToUpper(c)).ToArray()));
+            A("noaccent", "Supprimer les accents", "Coller sans accents", "sans accents enlever", TextOps.RemoveAccents);
+            A("spaces", "Supprimer les espaces en trop", "Coller sans espaces en trop", "espaces trim nettoyer", s => string.Join("\n", s.Replace("\r\n", "\n").Split('\n').Select(l => Regex.Replace(l, @"[ \t]+", " ").Trim())));
+            A("sort", "Trier les lignes", "Coller avec les lignes triées", "trier lignes sort alphabetique", s => string.Join("\r\n", s.Replace("\r\n", "\n").Split('\n').OrderBy(l => l, StringComparer.Create(Cul, true))));
+            A("dedup", "Supprimer les lignes en double", "Coller sans lignes en double", "doublons lignes unique", s => string.Join("\r\n", s.Replace("\r\n", "\n").Split('\n').Distinct()));
+            A("urlenc", "Encoder pour une URL", "Coller encodé pour une URL", "url encoder encode", Uri.EscapeDataString);
+            A("urldec", "Décoder une URL", "Coller l'URL décodée", "url decoder decode", Uri.UnescapeDataString);
             O("count", "Compter mots et caractères", "compter mots caracteres count", Count);
             O("translate", "Traduire la sélection", "traduire traduction translate", s => WebProvider.OpenEngine("tr", s));
             O("search", "Rechercher la sélection sur le web", "rechercher google web", s => WebProvider.OpenEngine("g", s));
         }
 
-        void A(string id, string title, string words, Func<string, string> t) { acts.Add(new Act { Id = id, Title = title, Words = words, T = t }); }
-        void O(string id, string title, string words, Action<string> o) { acts.Add(new Act { Id = id, Title = title, Words = words, O = o }); }
+        static void A(string id, string title, string pasteTitle, string words, Func<string, string> t) { All.Add(new Act { Id = id, Title = title, PasteTitle = pasteTitle, Words = words, T = t }); }
+        static void O(string id, string title, string words, Action<string> o) { All.Add(new Act { Id = id, Title = title, Words = words, O = o }); }
 
         static string Sentence(string s)
         {

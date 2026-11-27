@@ -85,6 +85,8 @@ namespace HoldKeys
             searchItem = new ToolStripMenuItem("Ouvrir le lanceur…", null, delegate { ShowSearch(); });
             menu.Items.Add(settingsItem);
             menu.Items.Add(searchItem);
+            pasteItem = new ToolStripMenuItem("Collage avancé…", null, delegate { ShowPaste(); });
+            menu.Items.Add(pasteItem);
             menu.Items.Add("Ouvrir le fichier de configuration", null, delegate { System.Diagnostics.Process.Start("notepad.exe", "\"" + cfgPath + "\""); });
             menu.Items.Add("Recharger la configuration", null, delegate { LoadConfig(); tray.ShowBalloonTip(1500, "HoldKeys", "Configuration rechargée", ToolTipIcon.Info); });
             menu.Items.Add(pause);
@@ -104,7 +106,7 @@ namespace HoldKeys
             if (hook == IntPtr.Zero)
                 MessageBox.Show("Impossible d'installer le hook clavier.", "HoldKeys");
 
-            hotkeyWnd.Pressed += ShowSearch;
+            hotkeyWnd.Pressed += id => { if (id == 2) ShowPaste(); else ShowSearch(); };
             hotkeyWnd.ClipboardChanged += () => LauncherForm.Delay(60, ClipboardHistory.OnChanged);
             hotkeyWnd.ListenClipboard();
             RegisterSearchKey(false);
@@ -132,16 +134,35 @@ namespace HoldKeys
         LauncherForm search;
         List<Sym> symbols;
         string searchKey = "Win+Alt+Space";
+        string pasteKey = "Win+Shift+V";
+        ToolStripMenuItem pasteItem;
 
         void RegisterSearchKey(bool notifyOk)
         {
-            bool ok = hotkeyWnd.Register(searchKey);
+            bool ok = hotkeyWnd.Register(1, searchKey);
             if (searchItem != null) searchItem.ShortcutKeyDisplayString = ok ? searchKey : "";
-            if (!ok && !string.IsNullOrEmpty(searchKey) && tray != null)
-                tray.ShowBalloonTip(3000, "HoldKeys", "Le raccourci " + searchKey + " est déjà utilisé par une autre application. Choisissez-en un autre dans Paramètres.", ToolTipIcon.Warning);
+            bool ok2 = hotkeyWnd.Register(2, pasteKey);
+            if (pasteItem != null) pasteItem.ShortcutKeyDisplayString = ok2 ? pasteKey : "";
+            foreach (var k in new[] { ok ? null : searchKey, ok2 ? null : pasteKey })
+                if (!string.IsNullOrEmpty(k) && tray != null)
+                    tray.ShowBalloonTip(3000, "HoldKeys", "Le raccourci " + k + " est déjà utilisé par une autre application. Choisissez-en un autre dans Paramètres.", ToolTipIcon.Warning);
         }
 
-        void ShowSearch()
+        internal void SettingsTab(int i) { if (settings != null && !settings.IsDisposed) settings.ShowTab(i); }
+
+        internal static void Ui(Action a)
+        {
+            if (Instance != null) Instance.popup.BeginInvoke(a);
+        }
+
+        void ShowPaste()
+        {
+            ShowSearch("+ ");
+        }
+
+        void ShowSearch() { ShowSearch(""); }
+
+        void ShowSearch(string initial)
         {
             if (search == null || search.IsDisposed)
             {
@@ -163,12 +184,13 @@ namespace HoldKeys
                         () => { List<string> r; return recent.TryGetValue("*", out r) ? (IList<string>)r : new string[0]; },
                         s => Remember("*", s)),
                     new ClipboardProvider(),
+                    new AdvancedPasteProvider(),
                     new SnippetsProvider(() => popup.BeginInvoke((Action)(() => { ShowSettings(); settings.ShowTab(2); }))),
                     new WebProvider(),
                 };
                 search = new LauncherForm(providers);
             }
-            search.Open();
+            search.Open(initial);
         }
 
         IEnumerable<KeyValuePair<string, string[]>> EntriesFromMap()
@@ -544,9 +566,12 @@ z = ž ź ż
                 map = c.ToMap();
                 symbols = null; // reconstruit à la prochaine recherche (nouveaux caractères de la config)
                 LoadRecent();
-                if (c.SearchKey != searchKey)
+                Claude.Load(Path.GetDirectoryName(cfgPath));
+                Claude.Model = c.AiModel;
+                if (c.SearchKey != searchKey || c.PasteKey != pasteKey)
                 {
                     searchKey = c.SearchKey;
+                    pasteKey = c.PasteKey;
                     if (tray != null) RegisterSearchKey(true);
                 }
             }

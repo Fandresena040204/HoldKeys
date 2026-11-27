@@ -12,6 +12,7 @@ Petit utilitaire Windows pour taper les caractères spéciaux en **maintenant un
   - Maj / Verr. Maj donnent les majuscules.
 - **Derniers caractères utilisés en premier** (historique conservé, effaçable).
 - **Lanceur universel** avec **Win+Alt+Espace** (voir ci-dessous).
+- **Collage avancé** avec **Win+Shift+V** (voir ci-dessous).
 - **Texte rapide** : tapez `;mail`, `;sig`, `;date`… n'importe où, l'abréviation est remplacée par votre texte.
 - **Historique du presse-papiers** chiffré avec votre compte Windows, avec épinglage (les mots de passe des gestionnaires sont ignorés).
 - **Fenêtre Paramètres** en onglets (double-clic sur l'icône) : délais, raccourci, caractères par touche, texte rapide, presse-papiers, démarrage avec Windows.
@@ -36,6 +37,22 @@ Petit utilitaire Windows pour taper les caractères spéciaux en **maintenant un
 | `verrouiller` `veille` `éteindre` `vider la corbeille`… | commandes système (confirmation pour les actions risquées) |
 
 Entrée : action principale (lancer, insérer, coller…) · Ctrl+Entrée : action secondaire · Tab : compléter · Échap : effacer puis fermer.
+
+## Collage avancé
+
+**Win+Shift+V** (ou `+` dans le lanceur) propose de coller ce que vous avez copié sous une autre forme. Le presse-papiers d'origine est restauré après le collage.
+
+| Contenu copié | Actions |
+|---|---|
+| Texte | texte brut · JSON (indenté, minifié, CSV/TSV → JSON, « clé : valeur » → JSON) · fichier `.txt` · MAJUSCULES, sans accents, lignes triées, sans doublons, URL encodée… |
+| Texte mis en forme (page web, Word…) | Markdown (titres, gras, liens, listes, tableaux) · fichier `.html` ou `.md` |
+| Image | texte de l'image (OCR de Windows, hors ligne) · fichier `.png` · Base64 (data URI) |
+| Fichiers | chemins · noms · contenu d'un fichier texte |
+| IA (optionnel) | actions personnalisables (corriger, traduire, résumer…) et instruction libre tapée dans la barre, via l'API Claude |
+
+Ctrl+Entrée : copier le résultat au lieu de le coller (ou, pour un fichier, l'enregistrer dans Téléchargements).
+
+Les actions IA utilisent votre propre clé API Claude (Paramètres > Collage avancé, stockée chiffrée avec votre compte Windows). Le contenu copié n'est envoyé à l'API Anthropic que lorsque vous choisissez une action IA. Sans clé, tout le reste fonctionne hors ligne.
 
 ## Installation
 
@@ -77,6 +94,7 @@ E = É È Ê Ë              # majuscules définies à part (optionnel)
 | `Launcher.cs` | Fenêtre du lanceur, modèle de résultats, icônes, usage |
 | `Providers.cs` | Modules : applications, fenêtres, calcul, unités, chemins, URL, fichiers, web, système, commandes |
 | `Extras.cs` | Presse-papiers, texte rapide, générateurs, actions sur le texte, symboles |
+| `Paste.cs` | Collage avancé : conversions, fichiers, OCR (API Windows), IA (API Claude) |
 | `make-icon.ps1` | Génère `HoldKeys.ico` |
 | `build.ps1` | Compile `HoldKeys.exe` |
 

@@ -311,7 +311,7 @@ namespace HoldKeys
 
         int S(float v) { return (int)(v * scale); }
 
-        public void Open()
+        public void Open(string initial = "")
         {
             previous = Native.GetForegroundWindow();
             if (previous == Handle) previous = IntPtr.Zero;
@@ -320,11 +320,12 @@ namespace HoldKeys
             Rectangle wa = sc.WorkingArea;
             Location = new Point(wa.Left + (wa.Width - Width) / 2, wa.Top + (int)(wa.Height * 0.16));
             using (var p = Popup.RoundRect(new RectangleF(0, 0, Width, Height), 12 * scale)) Region = new Region(p);
-            if (box.Text.Length > 0) box.Text = ""; else RefreshResults();
+            if (box.Text != initial) box.Text = initial; else RefreshResults();
             Show();
             Activate();
             Native.SetForegroundWindow(Handle);
             box.Focus();
+            box.SelectionStart = box.Text.Length;
         }
 
         public void SetQuery(string q)
