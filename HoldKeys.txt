@@ -1,0 +1,44 @@
+# HoldKeys — maintenez une lettre : le popup s'ouvre tout seul (ou appuyez sur Espace).
+# Espace / → = suivant, ← = précédent, 1-9 = choix direct.
+# Relâchez la lettre pour insérer le caractère sélectionné. Échap = annuler.
+# Après modification : clic droit sur l'icône > Recharger la configuration.
+#
+# Format :  lettre = car1 car2 car3 ...   (séparés par des espaces)
+# Une clé en minuscule sert aussi pour les majuscules (Maj / Verr. Maj),
+# sauf si vous définissez la majuscule séparément (ex :  E = É È Ê Ë).
+# Touches possibles : a-z et 0-9.
+
+# Délai minimum (ms) pendant lequel la lettre doit être maintenue avant Espace
+delay = 250
+
+# Ouverture automatique du popup après X ms de maintien (0 = seulement avec Espace)
+autoshow = 400
+
+# Afficher en premier les derniers caractères utilisés (1 = oui, 0 = non)
+recent = 1
+
+# Raccourci de la recherche de symboles par nom (vide = désactivé)
+searchkey = Win+Alt+Space
+
+a = à â ä á ã å æ ª @
+c = ç ć č ©
+d = ð
+e = é è ê ë ē ę €
+g = ğ
+i = î ï í ì ī
+l = ł
+m = µ
+n = ñ ń
+o = ô ö ó ò õ ø œ º °
+p = ¶ π
+r = ®
+s = ß š ś §
+t = ™ þ
+u = ù û ü ú ū
+x = ×
+y = ÿ ý
+z = ž ź ż
+1 = ¹ ½ ¼ ¡
+2 = ²
+3 = ³ ¾
+0 = ° ∅
